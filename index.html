@@ -533,6 +533,7 @@
                 const monthly = parseFloat(document.getElementById('monthlyValue').value) || 0;
                 const months = parseInt(document.getElementById('months').value) || 12;
                 
+                // O cálculo do total investido deve considerar o depósito inicial e os depósitos mensais
                 const total = initial + (monthly * Math.max(0, months - 1));
                 
                 const totalElement = document.getElementById('totalInvested');
@@ -617,24 +618,31 @@
             const annualRate = (currentCdiRate * cdbPerc) / 100;
             const monthlyRate = Math.pow(1 + annualRate, 1/12) - 1;
             
-            let totalInvested = initial;
             let currentPrincipal = initial;
-            let currentTotalAccumulated = initial;
+            let totalInvested = initial;
             let totalTax = 0;
-            
+            let totalGrossProfit = 0;
+            let totalNetProfit = 0;
+
             const tableBody = document.getElementById('tableBody');
             tableBody.innerHTML = '';
             
             for (let month = 1; month <= totalMonths; month++) {
-                // Cálculo de rendimento
+                // Adiciona o depósito mensal a partir do 2º mês ao capital principal
+                let depositValue = (month > 1) ? monthly : 0;
+                currentPrincipal += depositValue;
+                totalInvested += depositValue;
+                
+                // Cálculo de rendimento sobre o capital do início do mês
                 const grossReturn = currentPrincipal * monthlyRate;
+                totalGrossProfit += grossReturn;
                 
                 // Cálculo de impostos
                 let tax = 0;
                 if (investmentType === 'CDB') {
                     const irRate = getIrRate(month);
                     tax = grossReturn * irRate;
-                    if (month === 1) {
+                    if (month <= 1 && initial > 0) {
                         const iofRate = getIofRate(1);
                         tax += grossReturn * iofRate;
                     }
@@ -642,21 +650,14 @@
                 }
                 
                 const netReturn = grossReturn - tax;
-                
-                // Atualização do capital
+                totalNetProfit += netReturn;
+
+                // Aplica o reinvestimento
                 if (reinvest) {
                     currentPrincipal += netReturn;
                 }
                 
-                // Depósito mensal (a partir do 2º mês)
-                let depositValue = 0;
-                if (month > 1) {
-                    depositValue = monthly;
-                    totalInvested += monthly;
-                    currentPrincipal += monthly;
-                }
-                
-                currentTotalAccumulated = currentPrincipal;
+                const currentTotalAccumulated = currentPrincipal;
 
                 // Criação da linha da tabela
                 const row = document.createElement('tr');
@@ -672,9 +673,9 @@
             }
 
             // Exibir resumo final
-            const finalNetValue = currentPrincipal;
-            const finalGrossValue = finalNetValue + totalTax;
-            const finalProfit = finalNetValue - totalInvested;
+            const finalGrossValue = totalInvested + totalGrossProfit;
+            const finalNetValue = totalInvested + totalNetProfit;
+            const finalProfit = totalNetProfit;
 
             document.getElementById('totalInvested').textContent = formatCurrency(totalInvested);
             document.getElementById('grossValue').textContent = formatCurrency(finalGrossValue);
@@ -717,9 +718,7 @@
                 radio.addEventListener('change', handleFormUpdate);
             });
             
-            document.getElementById('reinvest').addEventListener('change', () => {
-                updateTotalInvested();
-            });
+            document.getElementById('reinvest').addEventListener('change', handleFormUpdate);
 
             calculateBtn.addEventListener('click', () => {
                 calculateBtn.textContent = 'Calculando...';
