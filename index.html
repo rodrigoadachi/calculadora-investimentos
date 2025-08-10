@@ -532,7 +532,8 @@
                 const initial = parseFloat(document.getElementById('initialValue').value) || 0;
                 const monthly = parseFloat(document.getElementById('monthlyValue').value) || 0;
                 const months = parseInt(document.getElementById('months').value) || 12;
-                const total = initial + (monthly * months);
+                
+                const total = initial + (monthly * Math.max(0, months - 1));
                 
                 const totalElement = document.getElementById('totalInvested');
                 if (totalElement) {
@@ -616,122 +617,76 @@
             const annualRate = (currentCdiRate * cdbPerc) / 100;
             const monthlyRate = Math.pow(1 + annualRate, 1/12) - 1;
             
-            const results = [];
-            let totalAccumulated = initial;
             let totalInvested = initial;
+            let currentPrincipal = initial;
+            let currentTotalAccumulated = initial;
             let totalTax = 0;
-            let totalGrossProfit = 0;
-
+            
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = '';
+            
             for (let month = 1; month <= totalMonths; month++) {
-                // Adiciona o depósito mensal ao valor acumulado para cálculo
-                // A partir do segundo mês
-                if (month > 1) {
-                    totalAccumulated += monthly;
-                    totalInvested += monthly;
-                }
-
-                // Saldo inicial do mês
-                const startBalance = totalAccumulated;
+                // Cálculo de rendimento
+                const grossReturn = currentPrincipal * monthlyRate;
                 
-                // Calcula rendimento sobre o valor acumulado no início do mês
-                const grossReturn = startBalance * monthlyRate;
-                totalGrossProfit += grossReturn;
-                
+                // Cálculo de impostos
                 let tax = 0;
-                
                 if (investmentType === 'CDB') {
                     const irRate = getIrRate(month);
                     tax = grossReturn * irRate;
-                    
-                    // IOF só incide nos primeiros 30 dias
-                    if (month === 1 && totalMonths > 0) {
-                        const iofRate = getIofRate(1); 
+                    if (month === 1) {
+                        const iofRate = getIofRate(1);
                         tax += grossReturn * iofRate;
                     }
                     totalTax += tax;
                 }
                 
                 const netReturn = grossReturn - tax;
-
-                // Atualiza o total acumulado com o rendimento
+                
+                // Atualização do capital
                 if (reinvest) {
-                    totalAccumulated += netReturn;
-                } else {
-                    totalAccumulated += grossReturn; // Não reinveste, mas o rendimento é somado para o valor final bruto
+                    currentPrincipal += netReturn;
                 }
                 
-                results.push({
-                    month,
-                    monthlyDeposit: (month === 1) ? initial : monthly,
-                    grossReturn,
-                    tax,
-                    netReturn,
-                    accumulatedTotal: totalAccumulated,
-                });
+                // Depósito mensal (a partir do 2º mês)
+                let depositValue = 0;
+                if (month > 1) {
+                    depositValue = monthly;
+                    totalInvested += monthly;
+                    currentPrincipal += monthly;
+                }
+                
+                currentTotalAccumulated = currentPrincipal;
+
+                // Criação da linha da tabela
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="font-weight: 600;">${month}</td>
+                    <td>${formatCurrency(depositValue)}</td>
+                    <td>${formatCurrency(grossReturn)}</td>
+                    <td style="color: #dc2626;">${formatCurrency(tax)}</td>
+                    <td style="color: #059669;">${formatCurrency(netReturn)}</td>
+                    <td style="font-weight: 600;">${formatCurrency(currentTotalAccumulated)}</td>
+                `;
+                tableBody.appendChild(row);
             }
-            
-            // Exibir resumo
-            const finalGrossValue = totalInvested + totalGrossProfit;
-            const finalNetValue = finalGrossValue - totalTax;
+
+            // Exibir resumo final
+            const finalNetValue = currentPrincipal;
+            const finalGrossValue = finalNetValue + totalTax;
+            const finalProfit = finalNetValue - totalInvested;
 
             document.getElementById('totalInvested').textContent = formatCurrency(totalInvested);
             document.getElementById('grossValue').textContent = formatCurrency(finalGrossValue);
             document.getElementById('taxValue').textContent = `-${formatCurrency(totalTax)}`;
             document.getElementById('netValue').textContent = formatCurrency(finalNetValue);
-            document.getElementById('profitValue').textContent = formatCurrency(finalNetValue - totalInvested);
+            document.getElementById('profitValue').textContent = formatCurrency(finalProfit);
 
-            // Exibir linhas do resumo
             ['grossRow', 'taxRow', 'netRow', 'profitRow'].forEach(id => {
                 document.getElementById(id).classList.remove('hidden');
                 document.getElementById(id).classList.add('block');
             });
-
-            // Preencher tabela
-            const tableBody = document.getElementById('tableBody');
-            tableBody.innerHTML = '';
             
-            let currentCapital = initial; // Capital que rende juros
-            let currentTotalWithDeposits = initial; // Capital + Depósitos
-
-            for (let i = 0; i < totalMonths; i++) {
-                const month = i + 1;
-                const deposit = (i === 0) ? initial : monthly;
-                
-                const grossReturn = currentCapital * monthlyRate;
-                
-                let tax = 0;
-                if (investmentType === 'CDB') {
-                    const irRate = getIrRate(month);
-                    tax = grossReturn * irRate;
-                    if (month === 1 && totalMonths > 0) {
-                        const iofRate = getIofRate(1);
-                        tax += grossReturn * iofRate;
-                    }
-                }
-                
-                const netReturn = grossReturn - tax;
-                
-                if (reinvest) {
-                    currentCapital += netReturn;
-                }
-                
-                if (i > 0) {
-                    currentCapital += monthly;
-                    currentTotalWithDeposits += monthly;
-                }
-
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td style="font-weight: 600;">${month}</td>
-                    <td>${formatCurrency(deposit)}</td>
-                    <td>${formatCurrency(grossReturn)}</td>
-                    <td style="color: #dc2626;">${formatCurrency(tax)}</td>
-                    <td style="color: #059669;">${formatCurrency(netReturn)}</td>
-                    <td style="font-weight: 600;">${formatCurrency(currentTotalWithDeposits + (reinvest ? 0 : netReturn))}</td>
-                `;
-                tableBody.appendChild(row);
-            }
-
             document.getElementById('resultsTable').style.display = 'block';
             
             setTimeout(() => {
@@ -762,6 +717,10 @@
                 radio.addEventListener('change', handleFormUpdate);
             });
             
+            document.getElementById('reinvest').addEventListener('change', () => {
+                updateTotalInvested();
+            });
+
             calculateBtn.addEventListener('click', () => {
                 calculateBtn.textContent = 'Calculando...';
                 calculateBtn.disabled = true;
