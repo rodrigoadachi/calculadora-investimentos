@@ -595,7 +595,7 @@
                     0.63, 0.60, 0.56, 0.53, 0.50, 0.46, 0.43, 0.40, 0.36, 0.33,
                     0.30, 0.26, 0.23, 0.20, 0.16, 0.13, 0.10, 0.06, 0.03, 0.00
                 ];
-                return (rates[days - 1] || 0);
+                return (rates[days - 1] || 0) / 100;
             }
             return 0;
         };
@@ -619,15 +619,17 @@
             const results = [];
             let totalAccumulated = initial;
             let totalTax = 0;
+            let totalGrossProfit = 0;
 
             for (let month = 1; month <= totalMonths; month++) {
-                // Adiciona o depósito mensal a partir do segundo mês
+                // Adiciona o depósito mensal (após o primeiro mês)
                 if (month > 1) {
                     totalAccumulated += monthly;
                 }
 
                 // Calcula rendimento sobre o valor acumulado no início do mês
                 const grossReturn = totalAccumulated * monthlyRate;
+                totalGrossProfit += grossReturn;
                 
                 let tax = 0;
                 
@@ -636,7 +638,7 @@
                     tax = grossReturn * irRate;
                     
                     if (month <= 1 && totalMonths > 0) {
-                        const iofRate = getIofRate(1); // IOF incide apenas sobre rendimento dos 30 primeiros dias.
+                        const iofRate = getIofRate(1); 
                         tax += grossReturn * iofRate;
                     }
                     totalTax += tax;
@@ -645,6 +647,7 @@
                 const netReturn = grossReturn - tax;
 
                 // Atualiza o total acumulado com o rendimento líquido (se reinvestir)
+                // ou com o rendimento bruto (se não reinvestir)
                 if (reinvest) {
                     totalAccumulated += netReturn;
                 } else {
@@ -661,15 +664,18 @@
                 });
             }
 
+            // Cálculo do total investido (soma de todos os depósitos)
             const totalInvested = initial + (monthly * (totalMonths - 1));
-            const finalResult = results[results.length - 1];
-
+            
             // Exibir resumo
+            const finalGrossValue = totalInvested + totalGrossProfit;
+            const finalNetValue = finalGrossValue - totalTax;
+
             document.getElementById('totalInvested').textContent = formatCurrency(totalInvested);
-            document.getElementById('grossValue').textContent = formatCurrency(finalResult.accumulatedTotal);
+            document.getElementById('grossValue').textContent = formatCurrency(finalGrossValue);
             document.getElementById('taxValue').textContent = `-${formatCurrency(totalTax)}`;
-            document.getElementById('netValue').textContent = formatCurrency(finalResult.accumulatedTotal - totalTax);
-            document.getElementById('profitValue').textContent = formatCurrency(finalResult.accumulatedTotal - totalTax - totalInvested);
+            document.getElementById('netValue').textContent = formatCurrency(finalNetValue);
+            document.getElementById('profitValue').textContent = formatCurrency(finalNetValue - totalInvested);
 
             // Exibir linhas do resumo
             ['grossRow', 'taxRow', 'netRow', 'profitRow'].forEach(id => {
@@ -680,25 +686,37 @@
             // Preencher tabela
             const tableBody = document.getElementById('tableBody');
             tableBody.innerHTML = '';
-            let currentTotal = initial;
+            
+            let currentTotalForTable = initial;
+            let currentProfitTotalForTable = 0;
 
             for (let i = 0; i < totalMonths; i++) {
                 const month = i + 1;
                 const deposit = (i === 0) ? initial : monthly;
-                currentTotal += (i > 0) ? monthly : 0; // Adiciona o depósito do mês
+                
+                // Adiciona o depósito mensal ao saldo atual para o cálculo
+                if (i > 0) {
+                    currentTotalForTable += deposit;
+                }
 
-                const grossReturn = currentTotal * monthlyRate;
+                // Calcula rendimento sobre o saldo do mês
+                const grossReturn = currentTotalForTable * monthlyRate;
+
                 let tax = 0;
                 if (investmentType === 'CDB') {
                     const irRate = getIrRate(month);
                     tax = grossReturn * irRate;
+                    if (month <= 1 && totalMonths > 0) {
+                        const iofRate = getIofRate(1);
+                        tax += grossReturn * iofRate;
+                    }
                 }
                 const netReturn = grossReturn - tax;
                 
                 if (reinvest) {
-                    currentTotal += netReturn;
+                    currentTotalForTable += netReturn;
                 } else {
-                    currentTotal += grossReturn;
+                    currentTotalForTable += grossReturn;
                 }
 
                 const row = document.createElement('tr');
@@ -708,7 +726,7 @@
                     <td>${formatCurrency(grossReturn)}</td>
                     <td style="color: #dc2626;">${formatCurrency(tax)}</td>
                     <td style="color: #059669;">${formatCurrency(netReturn)}</td>
-                    <td style="font-weight: 600;">${formatCurrency(currentTotal)}</td>
+                    <td style="font-weight: 600;">${formatCurrency(currentTotalForTable)}</td>
                 `;
                 tableBody.appendChild(row);
             }
@@ -747,7 +765,6 @@
                 calculateBtn.textContent = 'Calculando...';
                 calculateBtn.disabled = true;
                 
-                // Usar um pequeno atraso para que a UI tenha tempo de atualizar
                 setTimeout(() => {
                     calculateInvestment();
                     calculateBtn.textContent = 'Calcular Investimento';
